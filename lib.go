@@ -95,22 +95,28 @@ func (c *Client) SubscribeEvents(ctx context.Context) (*chan Event, *chan error,
 				errCh <- err
 				return
 			}
-			var eventData Event
+			
 			switch ev.Type {
 			case "message_update":
-				eventData = EventMessageUpdate{}
+				var messageUpdate EventMessageUpdate
+				err = json.Unmarshal([]byte(ev.Data), &messageUpdate)
+				if err != nil {
+					errCh <- err
+					return
+				}
+				ch <- messageUpdate
 			case "status_change":
-				eventData = EventStatusChange{}
+				var statusChange EventStatusChange
+				err = json.Unmarshal([]byte(ev.Data), &statusChange)
+				if err != nil {
+					errCh <- err
+					return
+				}
+				ch <- statusChange
 			default:
 				errCh <- fmt.Errorf("unknown event type: %s, data: %s", ev.Type, ev.Data)
 				return
 			}
-			err = json.Unmarshal([]byte(ev.Data), &eventData)
-			if err != nil {
-				errCh <- err
-				return
-			}
-			ch <- eventData
 		}
 
 	}()

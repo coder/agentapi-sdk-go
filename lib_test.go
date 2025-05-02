@@ -74,18 +74,18 @@ func (m *mockEventStream) Read(p []byte) (n int, err error) {
 	if m.closed {
 		return 0, io.EOF
 	}
-	
+
 	if m.pos >= len(m.events) {
 		m.closed = true
 		return 0, io.EOF
 	}
-	
+
 	event := m.events[m.pos]
 	// Add double newlines if they don't exist
 	if !strings.HasSuffix(event, "\n\n") {
 		event = event + "\n\n"
 	}
-	
+
 	bytesToCopy := copy(p, event)
 	if bytesToCopy < len(event) {
 		// Buffer too small, we'll need multiple reads
@@ -94,7 +94,7 @@ func (m *mockEventStream) Read(p []byte) (n int, err error) {
 		// Move to next event
 		m.pos++
 	}
-	
+
 	return bytesToCopy, nil
 }
 
@@ -605,7 +605,7 @@ func TestSubscribeEvents(t *testing.T) {
 
 		// Wait for and verify event
 		select {
-		case event := <-*eventsCh:
+		case event := <-eventsCh:
 			messageEvent, ok := event.(gen.MessageUpdateBody)
 			if !ok {
 				t.Fatalf("expected EventMessageUpdate, got %T", event)
@@ -619,7 +619,7 @@ func TestSubscribeEvents(t *testing.T) {
 			if messageEvent.Message != "Hello, world!" {
 				t.Errorf("expected message 'Hello, world!', got '%s'", messageEvent.Message)
 			}
-		case err := <-*errCh:
+		case err := <-errCh:
 			t.Fatalf("received unexpected error: %v", err)
 		case <-time.After(time.Second):
 			t.Fatal("timed out waiting for event")
@@ -655,7 +655,7 @@ func TestSubscribeEvents(t *testing.T) {
 
 		// Wait for and verify event
 		select {
-		case event := <-*eventsCh:
+		case event := <-eventsCh:
 			statusEvent, ok := event.(gen.StatusChangeBody)
 			if !ok {
 				t.Fatalf("expected EventStatusChange, got %T", event)
@@ -663,7 +663,7 @@ func TestSubscribeEvents(t *testing.T) {
 			if statusEvent.Status != gen.Stable {
 				t.Errorf("expected status %s, got %s", gen.Stable, statusEvent.Status)
 			}
-		case err := <-*errCh:
+		case err := <-errCh:
 			t.Fatalf("received unexpected error: %v", err)
 		case <-time.After(time.Second):
 			t.Fatal("timed out waiting for event")
@@ -694,9 +694,9 @@ func TestSubscribeEvents(t *testing.T) {
 
 		// Wait for error due to unknown event type
 		select {
-		case <-*eventsCh:
+		case <-eventsCh:
 			t.Fatal("expected error, got event")
-		case err := <-*errCh:
+		case err := <-errCh:
 			if !strings.Contains(err.Error(), "unknown event type") {
 				t.Errorf("expected 'unknown event type' error, got: %v", err)
 			}
@@ -729,9 +729,9 @@ func TestSubscribeEvents(t *testing.T) {
 
 		// Wait for error due to malformed data
 		select {
-		case <-*eventsCh:
+		case <-eventsCh:
 			t.Fatal("expected error, got event")
-		case err := <-*errCh:
+		case err := <-errCh:
 			if !strings.Contains(err.Error(), "invalid") {
 				t.Errorf("expected JSON unmarshal error, got: %v", err)
 			}

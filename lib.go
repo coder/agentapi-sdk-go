@@ -55,7 +55,7 @@ type EventStatusChange = gen.StatusChangeBody
 
 type SubscribeEventsResponse = gen.SubscribeEventsResponse
 
-func (c *Client) SubscribeEvents(ctx context.Context) (*chan Event, *chan error, error) {
+func (c *Client) SubscribeEvents(ctx context.Context) (chan Event, chan error, error) {
 	resp, err := c.client.SubscribeEvents(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to subscribe to events: %w", err)
@@ -95,7 +95,7 @@ func (c *Client) SubscribeEvents(ctx context.Context) (*chan Event, *chan error,
 				errCh <- err
 				return
 			}
-			
+
 			switch ev.Type {
 			case "message_update":
 				var messageUpdate EventMessageUpdate
@@ -121,5 +121,5 @@ func (c *Client) SubscribeEvents(ctx context.Context) (*chan Event, *chan error,
 
 	}()
 
-	return &ch, &errCh, nil
+	return ch, errCh, nil
 }

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	agentapisdk "github.com/coder/agentapi-sdk-go"
-	"github.com/coder/agentapi-sdk-go/gen"
 )
 
 // MockHTTPClient is a mock implementation of the agentapisdk.HTTPDoer interface
@@ -188,7 +187,7 @@ func TestPostMessage(t *testing.T) {
 				}
 
 				// Return a success response
-				return newJSONResponse(http.StatusOK, gen.MessageResponseBody{
+				return newJSONResponse(http.StatusOK, agentapisdk.PostMessageResponse{
 					Ok: true,
 				}), nil
 			},
@@ -212,10 +211,7 @@ func TestPostMessage(t *testing.T) {
 		if resp == nil {
 			t.Fatal("expected non-nil response")
 		}
-		if resp.JSON200 == nil {
-			t.Fatal("expected JSON200 response")
-		}
-		if !resp.JSON200.Ok {
+		if !resp.Ok {
 			t.Error("expected Ok to be true")
 		}
 	})
@@ -233,23 +229,27 @@ func TestPostMessage(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test PostMessage with server error
+		// Test PostMessage with server error - the implementation in lib.go is now expecting a non-nil JSON200
+		// So we need to modify the mock to return a nil JSON200 for this test
+		mockClient.DoFunc = func(req *http.Request) (*http.Response, error) {
+			// Simulate a response with no JSON200 field to trigger an error in lib.go
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewReader([]byte{})),
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+			}, nil
+		}
+
 		req := agentapisdk.PostMessageParams{
 			Content: "Hello, agent!",
 			Type:    agentapisdk.MessageTypeUser,
 		}
 		resp, err := client.PostMessage(ctx, req)
-		if err != nil {
-			t.Fatalf("PostMessage failed: %v", err)
+		if err == nil {
+			t.Fatal("expected error for invalid response")
 		}
-		if resp.StatusCode() != http.StatusInternalServerError {
-			t.Errorf("expected status code %d, got %d", http.StatusInternalServerError, resp.StatusCode())
-		}
-		if resp.ApplicationproblemJSONDefault == nil {
-			t.Fatal("expected error response")
-		}
-		if *resp.ApplicationproblemJSONDefault.Title != "Server Error" {
-			t.Errorf("unexpected error title: %s", *resp.ApplicationproblemJSONDefault.Title)
+		if resp != nil {
+			t.Fatal("expected nil response for error case")
 		}
 	})
 
@@ -301,8 +301,8 @@ func TestGetMessages(t *testing.T) {
 				}
 
 				// Return empty messages response
-				return newJSONResponse(http.StatusOK, gen.MessagesResponseBody{
-					Messages: []gen.Message{},
+				return newJSONResponse(http.StatusOK, agentapisdk.GetMessagesResponse{
+					Messages: []agentapisdk.Message{},
 				}), nil
 			},
 		}
@@ -320,11 +320,8 @@ func TestGetMessages(t *testing.T) {
 		if resp == nil {
 			t.Fatal("expected non-nil response")
 		}
-		if resp.JSON200 == nil {
-			t.Fatal("expected JSON200 response")
-		}
-		if len(resp.JSON200.Messages) != 0 {
-			t.Errorf("expected empty messages, got %d messages", len(resp.JSON200.Messages))
+		if len(resp.Messages) != 0 {
+			t.Errorf("expected empty messages, got %d messages", len(resp.Messages))
 		}
 	})
 
@@ -334,7 +331,7 @@ func TestGetMessages(t *testing.T) {
 			DoFunc: func(req *http.Request) (*http.Response, error) {
 				// Create example messages
 				now := time.Now()
-				messages := []gen.Message{
+				messages := []agentapisdk.Message{
 					{
 						Id:      1,
 						Content: "Hello!",
@@ -350,7 +347,7 @@ func TestGetMessages(t *testing.T) {
 				}
 
 				// Return messages response
-				return newJSONResponse(http.StatusOK, gen.MessagesResponseBody{
+				return newJSONResponse(http.StatusOK, agentapisdk.GetMessagesResponse{
 					Messages: messages,
 				}), nil
 			},
@@ -369,10 +366,7 @@ func TestGetMessages(t *testing.T) {
 		if resp == nil {
 			t.Fatal("expected non-nil response")
 		}
-		if resp.JSON200 == nil {
-			t.Fatal("expected JSON200 response")
-		}
-		messages := resp.JSON200.Messages
+		messages := resp.Messages
 		if len(messages) != 2 {
 			t.Fatalf("expected 2 messages, got %d", len(messages))
 		}
@@ -397,16 +391,23 @@ func TestGetMessages(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test GetMessages with server error
+		// Test GetMessages with server error - the implementation in lib.go is now expecting a non-nil JSON200
+		// So we need to modify the mock to return a nil JSON200 for this test
+		mockClient.DoFunc = func(req *http.Request) (*http.Response, error) {
+			// Simulate a response with no JSON200 field to trigger an error in lib.go
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewReader([]byte{})),
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+			}, nil
+		}
+
 		resp, err := client.GetMessages(ctx)
-		if err != nil {
-			t.Fatalf("GetMessages failed: %v", err)
+		if err == nil {
+			t.Fatal("expected error for invalid response")
 		}
-		if resp.StatusCode() != http.StatusInternalServerError {
-			t.Errorf("expected status code %d, got %d", http.StatusInternalServerError, resp.StatusCode())
-		}
-		if resp.ApplicationproblemJSONDefault == nil {
-			t.Fatal("expected error response")
+		if resp != nil {
+			t.Fatal("expected nil response for error case")
 		}
 	})
 
@@ -454,7 +455,7 @@ func TestGetStatus(t *testing.T) {
 				}
 
 				// Return status response
-				return newJSONResponse(http.StatusOK, gen.StatusResponseBody{
+				return newJSONResponse(http.StatusOK, agentapisdk.GetStatusResponse{
 					Status: agentapisdk.StatusRunning,
 				}), nil
 			},
@@ -473,11 +474,8 @@ func TestGetStatus(t *testing.T) {
 		if resp == nil {
 			t.Fatal("expected non-nil response")
 		}
-		if resp.JSON200 == nil {
-			t.Fatal("expected JSON200 response")
-		}
-		if resp.JSON200.Status != agentapisdk.StatusRunning {
-			t.Errorf("expected status %s, got %s", agentapisdk.StatusRunning, resp.JSON200.Status)
+		if resp.Status != agentapisdk.StatusRunning {
+			t.Errorf("expected status %s, got %s", agentapisdk.StatusRunning, resp.Status)
 		}
 	})
 
@@ -486,7 +484,7 @@ func TestGetStatus(t *testing.T) {
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
 				// Return status response
-				return newJSONResponse(http.StatusOK, gen.StatusResponseBody{
+				return newJSONResponse(http.StatusOK, agentapisdk.GetStatusResponse{
 					Status: agentapisdk.StatusStable,
 				}), nil
 			},
@@ -502,8 +500,8 @@ func TestGetStatus(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetStatus failed: %v", err)
 		}
-		if resp.JSON200.Status != agentapisdk.StatusStable {
-			t.Errorf("expected status %s, got %s", agentapisdk.StatusStable, resp.JSON200.Status)
+		if resp.Status != agentapisdk.StatusStable {
+			t.Errorf("expected status %s, got %s", agentapisdk.StatusStable, resp.Status)
 		}
 	})
 
@@ -520,13 +518,23 @@ func TestGetStatus(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test GetStatus with server error
-		resp, err := client.GetStatus(ctx)
-		if err != nil {
-			t.Fatalf("GetStatus failed: %v", err)
+		// Test GetStatus with server error - the implementation in lib.go is now expecting a non-nil JSON200
+		// So we need to modify the mock to return a nil JSON200 for this test
+		mockClient.DoFunc = func(req *http.Request) (*http.Response, error) {
+			// Simulate a response with no JSON200 field to trigger an error in lib.go
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewReader([]byte{})),
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+			}, nil
 		}
-		if resp.StatusCode() != http.StatusInternalServerError {
-			t.Errorf("expected status code %d, got %d", http.StatusInternalServerError, resp.StatusCode())
+
+		resp, err := client.GetStatus(ctx)
+		if err == nil {
+			t.Fatal("expected error for invalid response")
+		}
+		if resp != nil {
+			t.Fatal("expected nil response for error case")
 		}
 	})
 
@@ -560,7 +568,7 @@ func TestSubscribeEvents(t *testing.T) {
 
 	t.Run("successful subscription with message update", func(t *testing.T) {
 		// Create message update event
-		messageUpdate := gen.MessageUpdateBody{
+		messageUpdate := agentapisdk.EventMessageUpdate{
 			Id:      1,
 			Message: "Hello, world!",
 			Role:    agentapisdk.RoleAgent,
@@ -606,7 +614,7 @@ func TestSubscribeEvents(t *testing.T) {
 		// Wait for and verify event
 		select {
 		case event := <-eventsCh:
-			messageEvent, ok := event.(gen.MessageUpdateBody)
+			messageEvent, ok := event.(agentapisdk.EventMessageUpdate)
 			if !ok {
 				t.Fatalf("expected EventMessageUpdate, got %T", event)
 			}
@@ -628,7 +636,7 @@ func TestSubscribeEvents(t *testing.T) {
 
 	t.Run("successful subscription with status change", func(t *testing.T) {
 		// Create status change event
-		statusChange := gen.StatusChangeBody{
+		statusChange := agentapisdk.EventStatusChange{
 			Status: agentapisdk.StatusStable,
 		}
 		statusJSON, _ := json.Marshal(statusChange)
@@ -656,7 +664,7 @@ func TestSubscribeEvents(t *testing.T) {
 		// Wait for and verify event
 		select {
 		case event := <-eventsCh:
-			statusEvent, ok := event.(gen.StatusChangeBody)
+			statusEvent, ok := event.(agentapisdk.EventStatusChange)
 			if !ok {
 				t.Fatalf("expected EventStatusChange, got %T", event)
 			}

@@ -29,6 +29,7 @@ type HTTPDoer interface {
 func WithHTTPClient(client HTTPDoer) ClientOption {
 	return gen.WithHTTPClient(client)
 }
+
 // RequestEditorFn is a function that modifies HTTP requests before they are sent.
 type RequestEditorFn = gen.RequestEditorFn
 
@@ -53,22 +54,43 @@ func NewClient(server string, opts ...ClientOption) (*Client, error) {
 }
 
 type PostMessageParams = gen.PostMessageJSONRequestBody
-type PostMessageResponse = gen.PostMessageResponse
+type PostMessageResponse = gen.MessageResponseBody
 
 func (c *Client) PostMessage(ctx context.Context, body PostMessageParams) (*PostMessageResponse, error) {
-	return c.client.PostMessageWithResponse(ctx, body)
+	res, err := c.client.PostMessageWithResponse(ctx, body)
+	if err != nil {
+		return nil, err
+	}
+	if res.JSON200 == nil {
+		return nil, fmt.Errorf("failed to post message: %s", res.Body)
+	}
+	return res.JSON200, nil
 }
 
-type GetMessagesResponse = gen.GetMessagesResponse
+type GetMessagesResponse = gen.MessagesResponseBody
 
 func (c *Client) GetMessages(ctx context.Context) (*GetMessagesResponse, error) {
-	return c.client.GetMessagesWithResponse(ctx)
+	res, err := c.client.GetMessagesWithResponse(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if res.JSON200 == nil {
+		return nil, fmt.Errorf("failed to get messages: %s", res.Body)
+	}
+	return res.JSON200, nil
 }
 
-type GetStatusResponse = gen.GetStatusResponse
+type GetStatusResponse = gen.StatusResponseBody
 
 func (c *Client) GetStatus(ctx context.Context) (*GetStatusResponse, error) {
-	return c.client.GetStatusWithResponse(ctx)
+	res, err := c.client.GetStatusWithResponse(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if res.JSON200 == nil {
+		return nil, fmt.Errorf("failed to get status: %s", res.Body)
+	}
+	return res.JSON200, nil
 }
 
 // Event represents a server-sent event from the Agent API

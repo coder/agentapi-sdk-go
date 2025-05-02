@@ -18,9 +18,31 @@ type Client struct {
 
 type ClientOption = gen.ClientOption
 
-var WithHTTPClient = gen.WithHTTPClient
-var WithRequestEditorFn = gen.WithRequestEditorFn
-var WithBaseURL = gen.WithBaseURL
+// HTTPDoer is an interface for performing HTTP requests.
+// The standard http.Client implements this interface.
+type HTTPDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+// WithHTTPClient allows overriding the default HTTP client.
+// This is useful for testing with mock clients.
+func WithHTTPClient(client HTTPDoer) ClientOption {
+	return gen.WithHTTPClient(client)
+}
+// RequestEditorFn is a function that modifies HTTP requests before they are sent.
+type RequestEditorFn = gen.RequestEditorFn
+
+// WithRequestEditorFn adds a function that will be called to modify each request before sending.
+// This can be used to add headers, modify query parameters, etc.
+func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
+	return gen.WithRequestEditorFn(fn)
+}
+
+// WithBaseURL overrides the base URL for the client.
+// This is useful when you want to use a different server than the one provided to NewClient.
+func WithBaseURL(baseURL string) ClientOption {
+	return gen.WithBaseURL(baseURL)
+}
 
 func NewClient(server string, opts ...ClientOption) (*Client, error) {
 	client, err := gen.NewClientWithResponses(server, opts...)
@@ -49,9 +71,56 @@ func (c *Client) GetStatus(ctx context.Context) (*GetStatusResponse, error) {
 	return c.client.GetStatusWithResponse(ctx)
 }
 
+// Event represents a server-sent event from the Agent API
 type Event = any
+
+// EventMessageUpdate represents a message update event
 type EventMessageUpdate = gen.MessageUpdateBody
+
+// EventStatusChange represents a status change event
 type EventStatusChange = gen.StatusChangeBody
+
+// Constants for agent status
+const (
+	// StatusRunning indicates the agent is actively processing
+	StatusRunning AgentStatus = gen.Running
+	// StatusStable indicates the agent is idle
+	StatusStable AgentStatus = gen.Stable
+)
+
+// Constants for conversation roles
+const (
+	// RoleAgent is the role assigned to agent messages
+	RoleAgent ConversationRole = gen.ConversationRoleAgent
+	// RoleUser is the role assigned to user messages
+	RoleUser ConversationRole = gen.ConversationRoleUser
+)
+
+// Constants for message types
+const (
+	// MessageTypeRaw represents raw keystrokes sent to the agent
+	MessageTypeRaw MessageType = gen.MessageTypeRaw
+	// MessageTypeUser represents a user message
+	MessageTypeUser MessageType = gen.MessageTypeUser
+)
+
+// AgentStatus represents the current state of the agent
+type AgentStatus = gen.AgentStatus
+
+// ConversationRole defines the sender of a message (agent or user)
+type ConversationRole = gen.ConversationRole
+
+// MessageType defines the type of message being sent
+type MessageType = gen.MessageType
+
+// Message represents a single message in the conversation
+type Message = gen.Message
+
+// ErrorModel represents an error returned by the API
+type ErrorModel = gen.ErrorModel
+
+// ErrorDetail provides additional information about an error
+type ErrorDetail = gen.ErrorDetail
 
 type SubscribeEventsResponse = gen.SubscribeEventsResponse
 

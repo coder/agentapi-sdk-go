@@ -16,12 +16,12 @@ import (
 	"github.com/coder/agentapi-sdk-go/gen"
 )
 
-// MockHTTPClient is a mock implementation of the gen.HttpRequestDoer interface
+// MockHTTPClient is a mock implementation of the agentapisdk.HTTPDoer interface
 type MockHTTPClient struct {
 	DoFunc func(req *http.Request) (*http.Response, error)
 }
 
-// Do implements the HttpRequestDoer interface
+// Do implements the HTTPDoer interface
 func (m *MockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	if m.DoFunc != nil {
 		return m.DoFunc(req)
@@ -41,7 +41,7 @@ func newJSONResponse(statusCode int, body interface{}) *http.Response {
 
 // Helper function to create an error response
 func newErrorResponse(statusCode int, errTitle, errDetail string) *http.Response {
-	errModel := gen.ErrorModel{
+	errModel := agentapisdk.ErrorModel{
 		Title:  &errTitle,
 		Detail: &errDetail,
 		Status: &[]int64{int64(statusCode)}[0],
@@ -158,10 +158,10 @@ func TestNewClient(t *testing.T) {
 	})
 
 	t.Run("with request editor", func(t *testing.T) {
-		editor := func(ctx context.Context, req *http.Request) error {
+		editor := agentapisdk.RequestEditorFn(func(ctx context.Context, req *http.Request) error {
 			req.Header.Set("X-Test-Header", "test-value")
 			return nil
-		}
+		})
 		client, err := agentapisdk.NewClient("https://example.com", agentapisdk.WithRequestEditorFn(editor))
 		if err != nil {
 			t.Fatalf("NewClient failed: %v", err)
@@ -203,7 +203,7 @@ func TestPostMessage(t *testing.T) {
 		// Test PostMessage
 		req := agentapisdk.PostMessageParams{
 			Content: "Hello, agent!",
-			Type:    gen.MessageTypeUser,
+			Type:    agentapisdk.MessageTypeUser,
 		}
 		resp, err := client.PostMessage(ctx, req)
 		if err != nil {
@@ -236,7 +236,7 @@ func TestPostMessage(t *testing.T) {
 		// Test PostMessage with server error
 		req := agentapisdk.PostMessageParams{
 			Content: "Hello, agent!",
-			Type:    gen.MessageTypeUser,
+			Type:    agentapisdk.MessageTypeUser,
 		}
 		resp, err := client.PostMessage(ctx, req)
 		if err != nil {
@@ -270,7 +270,7 @@ func TestPostMessage(t *testing.T) {
 		// Test PostMessage with client error
 		req := agentapisdk.PostMessageParams{
 			Content: "Hello, agent!",
-			Type:    gen.MessageTypeUser,
+			Type:    agentapisdk.MessageTypeUser,
 		}
 		resp, err := client.PostMessage(ctx, req)
 		if err == nil {
@@ -338,13 +338,13 @@ func TestGetMessages(t *testing.T) {
 					{
 						Id:      1,
 						Content: "Hello!",
-						Role:    gen.ConversationRoleUser,
+						Role:    agentapisdk.RoleUser,
 						Time:    now.Add(-time.Minute),
 					},
 					{
 						Id:      2,
 						Content: "How can I help you?",
-						Role:    gen.ConversationRoleAgent,
+						Role:    agentapisdk.RoleAgent,
 						Time:    now,
 					},
 				}
@@ -376,10 +376,10 @@ func TestGetMessages(t *testing.T) {
 		if len(messages) != 2 {
 			t.Fatalf("expected 2 messages, got %d", len(messages))
 		}
-		if messages[0].Id != 1 || messages[0].Role != gen.ConversationRoleUser {
+		if messages[0].Id != 1 || messages[0].Role != agentapisdk.RoleUser {
 			t.Errorf("unexpected first message: %+v", messages[0])
 		}
-		if messages[1].Id != 2 || messages[1].Role != gen.ConversationRoleAgent {
+		if messages[1].Id != 2 || messages[1].Role != agentapisdk.RoleAgent {
 			t.Errorf("unexpected second message: %+v", messages[1])
 		}
 	})
@@ -455,7 +455,7 @@ func TestGetStatus(t *testing.T) {
 
 				// Return status response
 				return newJSONResponse(http.StatusOK, gen.StatusResponseBody{
-					Status: gen.Running,
+					Status: agentapisdk.StatusRunning,
 				}), nil
 			},
 		}
@@ -476,8 +476,8 @@ func TestGetStatus(t *testing.T) {
 		if resp.JSON200 == nil {
 			t.Fatal("expected JSON200 response")
 		}
-		if resp.JSON200.Status != gen.Running {
-			t.Errorf("expected status %s, got %s", gen.Running, resp.JSON200.Status)
+		if resp.JSON200.Status != agentapisdk.StatusRunning {
+			t.Errorf("expected status %s, got %s", agentapisdk.StatusRunning, resp.JSON200.Status)
 		}
 	})
 
@@ -487,7 +487,7 @@ func TestGetStatus(t *testing.T) {
 			DoFunc: func(req *http.Request) (*http.Response, error) {
 				// Return status response
 				return newJSONResponse(http.StatusOK, gen.StatusResponseBody{
-					Status: gen.Stable,
+					Status: agentapisdk.StatusStable,
 				}), nil
 			},
 		}
@@ -502,8 +502,8 @@ func TestGetStatus(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetStatus failed: %v", err)
 		}
-		if resp.JSON200.Status != gen.Stable {
-			t.Errorf("expected status %s, got %s", gen.Stable, resp.JSON200.Status)
+		if resp.JSON200.Status != agentapisdk.StatusStable {
+			t.Errorf("expected status %s, got %s", agentapisdk.StatusStable, resp.JSON200.Status)
 		}
 	})
 
@@ -563,7 +563,7 @@ func TestSubscribeEvents(t *testing.T) {
 		messageUpdate := gen.MessageUpdateBody{
 			Id:      1,
 			Message: "Hello, world!",
-			Role:    gen.ConversationRoleAgent,
+			Role:    agentapisdk.RoleAgent,
 			Time:    time.Now(),
 		}
 		messageJSON, _ := json.Marshal(messageUpdate)
@@ -613,8 +613,8 @@ func TestSubscribeEvents(t *testing.T) {
 			if messageEvent.Id != 1 {
 				t.Errorf("expected message ID 1, got %d", messageEvent.Id)
 			}
-			if messageEvent.Role != gen.ConversationRoleAgent {
-				t.Errorf("expected role %s, got %s", gen.ConversationRoleAgent, messageEvent.Role)
+			if messageEvent.Role != agentapisdk.RoleAgent {
+				t.Errorf("expected role %s, got %s", agentapisdk.RoleAgent, messageEvent.Role)
 			}
 			if messageEvent.Message != "Hello, world!" {
 				t.Errorf("expected message 'Hello, world!', got '%s'", messageEvent.Message)
@@ -629,7 +629,7 @@ func TestSubscribeEvents(t *testing.T) {
 	t.Run("successful subscription with status change", func(t *testing.T) {
 		// Create status change event
 		statusChange := gen.StatusChangeBody{
-			Status: gen.Stable,
+			Status: agentapisdk.StatusStable,
 		}
 		statusJSON, _ := json.Marshal(statusChange)
 		// Proper SSE format requires each data line to be prefixed with "data: "
@@ -660,8 +660,8 @@ func TestSubscribeEvents(t *testing.T) {
 			if !ok {
 				t.Fatalf("expected EventStatusChange, got %T", event)
 			}
-			if statusEvent.Status != gen.Stable {
-				t.Errorf("expected status %s, got %s", gen.Stable, statusEvent.Status)
+			if statusEvent.Status != agentapisdk.StatusStable {
+				t.Errorf("expected status %s, got %s", agentapisdk.StatusStable, statusEvent.Status)
 			}
 		case err := <-errCh:
 			t.Fatalf("received unexpected error: %v", err)

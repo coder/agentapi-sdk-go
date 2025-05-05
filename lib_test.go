@@ -13,6 +13,7 @@ import (
 	"time"
 
 	agentapisdk "github.com/coder/agentapi-sdk-go"
+	"github.com/stretchr/testify/assert"
 )
 
 // MockHTTPClient is a mock implementation of the agentapisdk.HTTPDoer interface
@@ -80,7 +81,6 @@ func (m *mockEventStream) Read(p []byte) (n int, err error) {
 	}
 
 	event := m.events[m.pos]
-	// Add double newlines if they don't exist
 	if !strings.HasSuffix(event, "\n\n") {
 		event = event + "\n\n"
 	}
@@ -119,19 +119,6 @@ func TestNewClient(t *testing.T) {
 		}
 		if client == nil {
 			t.Fatal("expected non-nil client")
-		}
-	})
-
-	// Skip this test since the URL parsing implementation might be more permissive
-	// than we expected and might allow seemingly invalid URLs
-	t.Run("with invalid credentials", func(t *testing.T) {
-		_, err := agentapisdk.NewClient("https://invalid:auth@example.com")
-		// This is technically still a valid URL, so we're checking different behavior
-		if err != nil {
-			// Just to have some assertion - check that error is not about URL parsing
-			if strings.Contains(err.Error(), "invalid URL") {
-				t.Errorf("Got unexpected URL parsing error: %v", err)
-			}
 		}
 	})
 
@@ -175,7 +162,6 @@ func TestPostMessage(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("successful post", func(t *testing.T) {
-		// Setup mock client to return a successful response
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
 				// Verify request
@@ -217,27 +203,20 @@ func TestPostMessage(t *testing.T) {
 	})
 
 	t.Run("server error", func(t *testing.T) {
-		// Setup mock client to return a server error
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
-				return newErrorResponse(http.StatusInternalServerError, "Server Error", "Internal server error"), nil
+				// Simulate a response with no JSON200 field to trigger an error in lib.go
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(bytes.NewReader([]byte{})),
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+				}, nil
 			},
 		}
 
 		client, err := agentapisdk.NewClient("https://example.com", agentapisdk.WithHTTPClient(mockClient))
 		if err != nil {
 			t.Fatalf("NewClient failed: %v", err)
-		}
-
-		// Test PostMessage with server error - the implementation in lib.go is now expecting a non-nil JSON200
-		// So we need to modify the mock to return a nil JSON200 for this test
-		mockClient.DoFunc = func(req *http.Request) (*http.Response, error) {
-			// Simulate a response with no JSON200 field to trigger an error in lib.go
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewReader([]byte{})),
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-			}, nil
 		}
 
 		req := agentapisdk.PostMessageParams{
@@ -254,7 +233,6 @@ func TestPostMessage(t *testing.T) {
 	})
 
 	t.Run("client error", func(t *testing.T) {
-		// Setup mock client to return a client error
 		networkErr := errors.New("network error")
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
@@ -277,7 +255,7 @@ func TestPostMessage(t *testing.T) {
 			t.Fatal("expected error, got nil")
 		}
 		if resp != nil {
-			t.Fatal("expected nil response")
+			t.Fatal("expected nil response for error case")
 		}
 		if !errors.Is(err, networkErr) {
 			t.Errorf("expected network error, got: %v", err)
@@ -289,7 +267,6 @@ func TestGetMessages(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("empty message list", func(t *testing.T) {
-		// Setup mock client to return an empty message list
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
 				// Verify request
@@ -326,10 +303,8 @@ func TestGetMessages(t *testing.T) {
 	})
 
 	t.Run("populated message list", func(t *testing.T) {
-		// Setup mock client to return messages
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
-				// Create example messages
 				now := time.Now()
 				messages := []agentapisdk.Message{
 					{
@@ -346,7 +321,6 @@ func TestGetMessages(t *testing.T) {
 					},
 				}
 
-				// Return messages response
 				return newJSONResponse(http.StatusOK, agentapisdk.GetMessagesResponse{
 					Messages: messages,
 				}), nil
@@ -358,7 +332,6 @@ func TestGetMessages(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test GetMessages
 		resp, err := client.GetMessages(ctx)
 		if err != nil {
 			t.Fatalf("GetMessages failed: %v", err)
@@ -379,27 +352,20 @@ func TestGetMessages(t *testing.T) {
 	})
 
 	t.Run("server error", func(t *testing.T) {
-		// Setup mock client to return a server error
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
-				return newErrorResponse(http.StatusInternalServerError, "Server Error", "Internal server error"), nil
+				// Simulate a response with no JSON200 field to trigger an error in lib.go
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(bytes.NewReader([]byte{})),
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+				}, nil
 			},
 		}
 
 		client, err := agentapisdk.NewClient("https://example.com", agentapisdk.WithHTTPClient(mockClient))
 		if err != nil {
 			t.Fatalf("NewClient failed: %v", err)
-		}
-
-		// Test GetMessages with server error - the implementation in lib.go is now expecting a non-nil JSON200
-		// So we need to modify the mock to return a nil JSON200 for this test
-		mockClient.DoFunc = func(req *http.Request) (*http.Response, error) {
-			// Simulate a response with no JSON200 field to trigger an error in lib.go
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewReader([]byte{})),
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-			}, nil
 		}
 
 		resp, err := client.GetMessages(ctx)
@@ -412,7 +378,6 @@ func TestGetMessages(t *testing.T) {
 	})
 
 	t.Run("client error", func(t *testing.T) {
-		// Setup mock client to return a client error
 		networkErr := errors.New("network error")
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
@@ -425,13 +390,12 @@ func TestGetMessages(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test GetMessages with client error
 		resp, err := client.GetMessages(ctx)
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
 		if resp != nil {
-			t.Fatal("expected nil response")
+			t.Fatal("expected nil response for error case")
 		}
 		if !errors.Is(err, networkErr) {
 			t.Errorf("expected network error, got: %v", err)
@@ -443,10 +407,8 @@ func TestGetStatus(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("running status", func(t *testing.T) {
-		// Setup mock client to return running status
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
-				// Verify request
 				if req.Method != "GET" {
 					t.Errorf("expected GET method, got %s", req.Method)
 				}
@@ -454,7 +416,6 @@ func TestGetStatus(t *testing.T) {
 					t.Errorf("unexpected URL path: %s", req.URL.Path)
 				}
 
-				// Return status response
 				return newJSONResponse(http.StatusOK, agentapisdk.GetStatusResponse{
 					Status: agentapisdk.StatusRunning,
 				}), nil
@@ -480,10 +441,8 @@ func TestGetStatus(t *testing.T) {
 	})
 
 	t.Run("stable status", func(t *testing.T) {
-		// Setup mock client to return stable status
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
-				// Return status response
 				return newJSONResponse(http.StatusOK, agentapisdk.GetStatusResponse{
 					Status: agentapisdk.StatusStable,
 				}), nil
@@ -495,7 +454,6 @@ func TestGetStatus(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test GetStatus
 		resp, err := client.GetStatus(ctx)
 		if err != nil {
 			t.Fatalf("GetStatus failed: %v", err)
@@ -506,27 +464,20 @@ func TestGetStatus(t *testing.T) {
 	})
 
 	t.Run("server error", func(t *testing.T) {
-		// Setup mock client to return a server error
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
-				return newErrorResponse(http.StatusInternalServerError, "Server Error", "Internal server error"), nil
+				// Simulate a response with no JSON200 field to trigger an error in lib.go
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(bytes.NewReader([]byte{})),
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+				}, nil
 			},
 		}
 
 		client, err := agentapisdk.NewClient("https://example.com", agentapisdk.WithHTTPClient(mockClient))
 		if err != nil {
 			t.Fatalf("NewClient failed: %v", err)
-		}
-
-		// Test GetStatus with server error - the implementation in lib.go is now expecting a non-nil JSON200
-		// So we need to modify the mock to return a nil JSON200 for this test
-		mockClient.DoFunc = func(req *http.Request) (*http.Response, error) {
-			// Simulate a response with no JSON200 field to trigger an error in lib.go
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewReader([]byte{})),
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-			}, nil
 		}
 
 		resp, err := client.GetStatus(ctx)
@@ -539,7 +490,6 @@ func TestGetStatus(t *testing.T) {
 	})
 
 	t.Run("client error", func(t *testing.T) {
-		// Setup mock client to return a client error
 		networkErr := errors.New("network error")
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
@@ -552,36 +502,39 @@ func TestGetStatus(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test GetStatus with client error
 		resp, err := client.GetStatus(ctx)
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
 		if resp != nil {
-			t.Fatal("expected nil response")
+			t.Fatal("expected nil response for error case")
 		}
 	})
+}
+
+func marshal(t *testing.T, event any) string {
+	json, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("failed to marshal event: %v", err)
+	}
+	return string(json)
 }
 
 func TestSubscribeEvents(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("successful subscription with message update", func(t *testing.T) {
-		// Create message update event
 		messageUpdate := agentapisdk.EventMessageUpdate{
 			Id:      1,
 			Message: "Hello, world!",
 			Role:    agentapisdk.RoleAgent,
 			Time:    time.Now(),
 		}
-		messageJSON, _ := json.Marshal(messageUpdate)
-		// Proper SSE format requires each data line to be prefixed with "data: "
-		messageEvent := fmt.Sprintf("event: message_update\ndata: %s", messageJSON)
+		messageJSON := marshal(t, messageUpdate)
+		messageEvent := fmt.Sprintf("event: %s\ndata: %s", agentapisdk.EventTypeMessageUpdate, messageJSON)
 
-		// Setup mock client to return an SSE stream
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
-				// Verify request
 				if req.Method != "GET" {
 					t.Errorf("expected GET method, got %s", req.Method)
 				}
@@ -589,7 +542,6 @@ func TestSubscribeEvents(t *testing.T) {
 					t.Errorf("unexpected URL path: %s", req.URL.Path)
 				}
 
-				// Return SSE response with events
 				return newSSEResponse([]string{messageEvent}), nil
 			},
 		}
@@ -599,34 +551,18 @@ func TestSubscribeEvents(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test SubscribeEvents
 		eventsCh, errCh, err := client.SubscribeEvents(ctx)
 		if err != nil {
 			t.Fatalf("SubscribeEvents failed: %v", err)
 		}
-		if eventsCh == nil {
-			t.Fatal("expected non-nil events channel")
-		}
-		if errCh == nil {
-			t.Fatal("expected non-nil error channel")
-		}
 
-		// Wait for and verify event
 		select {
 		case event := <-eventsCh:
-			messageEvent, ok := event.(agentapisdk.EventMessageUpdate)
+			msgEvent, ok := event.(agentapisdk.EventMessageUpdate)
 			if !ok {
 				t.Fatalf("expected EventMessageUpdate, got %T", event)
 			}
-			if messageEvent.Id != 1 {
-				t.Errorf("expected message ID 1, got %d", messageEvent.Id)
-			}
-			if messageEvent.Role != agentapisdk.RoleAgent {
-				t.Errorf("expected role %s, got %s", agentapisdk.RoleAgent, messageEvent.Role)
-			}
-			if messageEvent.Message != "Hello, world!" {
-				t.Errorf("expected message 'Hello, world!', got '%s'", messageEvent.Message)
-			}
+			assert.Equal(t, marshal(t, msgEvent), marshal(t, messageUpdate))
 		case err := <-errCh:
 			t.Fatalf("received unexpected error: %v", err)
 		case <-time.After(time.Second):
@@ -635,15 +571,12 @@ func TestSubscribeEvents(t *testing.T) {
 	})
 
 	t.Run("successful subscription with status change", func(t *testing.T) {
-		// Create status change event
 		statusChange := agentapisdk.EventStatusChange{
 			Status: agentapisdk.StatusStable,
 		}
-		statusJSON, _ := json.Marshal(statusChange)
-		// Proper SSE format requires each data line to be prefixed with "data: "
-		statusEvent := fmt.Sprintf("event: status_change\ndata: %s", statusJSON)
+		statusJSON := marshal(t, statusChange)
+		statusEvent := fmt.Sprintf("event: %s\ndata: %s", agentapisdk.EventTypeStatusChange, statusJSON)
 
-		// Setup mock client
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
 				return newSSEResponse([]string{statusEvent}), nil
@@ -655,22 +588,18 @@ func TestSubscribeEvents(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test SubscribeEvents
 		eventsCh, errCh, err := client.SubscribeEvents(ctx)
 		if err != nil {
 			t.Fatalf("SubscribeEvents failed: %v", err)
 		}
 
-		// Wait for and verify event
 		select {
 		case event := <-eventsCh:
-			statusEvent, ok := event.(agentapisdk.EventStatusChange)
+			statusEvt, ok := event.(agentapisdk.EventStatusChange)
 			if !ok {
 				t.Fatalf("expected EventStatusChange, got %T", event)
 			}
-			if statusEvent.Status != agentapisdk.StatusStable {
-				t.Errorf("expected status %s, got %s", agentapisdk.StatusStable, statusEvent.Status)
-			}
+			assert.Equal(t, marshal(t, statusEvt), marshal(t, statusChange))
 		case err := <-errCh:
 			t.Fatalf("received unexpected error: %v", err)
 		case <-time.After(time.Second):
@@ -678,11 +607,92 @@ func TestSubscribeEvents(t *testing.T) {
 		}
 	})
 
+	t.Run("multiple events", func(t *testing.T) {
+		events := []agentapisdk.Event{
+			agentapisdk.EventMessageUpdate{
+				Id:      1,
+				Message: "Hello, world!",
+				Role:    agentapisdk.RoleAgent,
+				Time:    time.Now(),
+			},
+			agentapisdk.EventStatusChange{
+				Status: agentapisdk.StatusStable,
+			},
+			agentapisdk.EventMessageUpdate{
+				Id:      2,
+				Message: "Hello, world 2!",
+				Role:    agentapisdk.RoleAgent,
+				Time:    time.Now(),
+			},
+			agentapisdk.EventStatusChange{
+				Status: agentapisdk.StatusRunning,
+			},
+		}
+		eventsStrings := []string{}
+		for _, event := range events {
+			eventJSON, _ := json.Marshal(event)
+			switch event.(type) {
+			case agentapisdk.EventMessageUpdate:
+				eventsStrings = append(eventsStrings, fmt.Sprintf("event: %s\ndata: %s", agentapisdk.EventTypeMessageUpdate, eventJSON))
+			case agentapisdk.EventStatusChange:
+				eventsStrings = append(eventsStrings, fmt.Sprintf("event: %s\ndata: %s", agentapisdk.EventTypeStatusChange, eventJSON))
+			default:
+				t.Fatalf("unknown event type: %T", event)
+			}
+
+		}
+
+		mockClient := &MockHTTPClient{
+			DoFunc: func(req *http.Request) (*http.Response, error) {
+				return newSSEResponse(eventsStrings), nil
+			},
+		}
+
+		client, err := agentapisdk.NewClient("https://example.com", agentapisdk.WithHTTPClient(mockClient))
+		if err != nil {
+			t.Fatalf("NewClient failed: %v", err)
+		}
+
+		eventsCh, errCh, err := client.SubscribeEvents(ctx)
+		if err != nil {
+			t.Fatalf("SubscribeEvents failed: %v", err)
+		}
+
+		receivedEvents := make([]agentapisdk.Event, 0, len(events))
+		timeout := time.After(500 * time.Millisecond)
+
+		for {
+			select {
+			case event, ok := <-eventsCh:
+				if !ok {
+					goto checkEvents
+				}
+				receivedEvents = append(receivedEvents, event)
+				if len(receivedEvents) == len(events) {
+					goto checkEvents
+				}
+			case err := <-errCh:
+				if err != nil {
+					t.Fatalf("received unexpected error: %v", err)
+				}
+			case <-timeout:
+				goto checkEvents
+			}
+		}
+
+	checkEvents:
+		if len(receivedEvents) != len(events) {
+			t.Fatalf("expected %d events, got %d", len(events), len(receivedEvents))
+		}
+
+		for i, event := range events {
+			assert.Equal(t, marshal(t, receivedEvents[i]), marshal(t, event))
+		}
+	})
+
 	t.Run("unknown event type", func(t *testing.T) {
-		// Create unknown event type
 		unknownEvent := "event: unknown_event\ndata: {\"foo\":\"bar\"}"
 
-		// Setup mock client
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
 				return newSSEResponse([]string{unknownEvent}), nil
@@ -694,13 +704,11 @@ func TestSubscribeEvents(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test SubscribeEvents
 		eventsCh, errCh, err := client.SubscribeEvents(ctx)
 		if err != nil {
 			t.Fatalf("SubscribeEvents failed: %v", err)
 		}
 
-		// Wait for error due to unknown event type
 		select {
 		case <-eventsCh:
 			t.Fatal("expected error, got event")
@@ -714,10 +722,8 @@ func TestSubscribeEvents(t *testing.T) {
 	})
 
 	t.Run("malformed event data", func(t *testing.T) {
-		// Create malformed event
-		malformedEvent := "event: message_update\ndata: {invalid_json}"
+		malformedEvent := fmt.Sprintf("event: %s\ndata: {invalid_json}", agentapisdk.EventTypeMessageUpdate)
 
-		// Setup mock client
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
 				return newSSEResponse([]string{malformedEvent}), nil
@@ -729,13 +735,11 @@ func TestSubscribeEvents(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test SubscribeEvents
 		eventsCh, errCh, err := client.SubscribeEvents(ctx)
 		if err != nil {
 			t.Fatalf("SubscribeEvents failed: %v", err)
 		}
 
-		// Wait for error due to malformed data
 		select {
 		case <-eventsCh:
 			t.Fatal("expected error, got event")
@@ -749,7 +753,6 @@ func TestSubscribeEvents(t *testing.T) {
 	})
 
 	t.Run("server error response", func(t *testing.T) {
-		// Setup mock client to return an error response
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
 				return newErrorResponse(http.StatusInternalServerError, "Server Error", "Internal server error"), nil
@@ -761,7 +764,6 @@ func TestSubscribeEvents(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test SubscribeEvents with server error
 		_, _, err = client.SubscribeEvents(ctx)
 		if err == nil {
 			t.Fatal("expected error, got nil")
@@ -772,7 +774,6 @@ func TestSubscribeEvents(t *testing.T) {
 	})
 
 	t.Run("client error", func(t *testing.T) {
-		// Setup mock client to return a client error
 		networkErr := errors.New("network error")
 		mockClient := &MockHTTPClient{
 			DoFunc: func(req *http.Request) (*http.Response, error) {
@@ -785,7 +786,6 @@ func TestSubscribeEvents(t *testing.T) {
 			t.Fatalf("NewClient failed: %v", err)
 		}
 
-		// Test SubscribeEvents with client error
 		_, _, err = client.SubscribeEvents(ctx)
 		if err == nil {
 			t.Fatal("expected error, got nil")

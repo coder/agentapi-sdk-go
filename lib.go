@@ -146,6 +146,13 @@ type ErrorDetail = gen.ErrorDetail
 
 type SubscribeEventsResponse = gen.SubscribeEventsResponse
 
+type EventType = string
+
+const (
+	EventTypeMessageUpdate EventType = "message_update"
+	EventTypeStatusChange  EventType = "status_change"
+)
+
 func (c *Client) SubscribeEvents(ctx context.Context) (chan Event, chan error, error) {
 	resp, err := c.client.SubscribeEvents(ctx)
 	if err != nil {
@@ -188,7 +195,7 @@ func (c *Client) SubscribeEvents(ctx context.Context) (chan Event, chan error, e
 			}
 
 			switch ev.Type {
-			case "message_update":
+			case EventTypeMessageUpdate:
 				var messageUpdate EventMessageUpdate
 				err = json.Unmarshal([]byte(ev.Data), &messageUpdate)
 				if err != nil {
@@ -196,7 +203,7 @@ func (c *Client) SubscribeEvents(ctx context.Context) (chan Event, chan error, e
 					return
 				}
 				ch <- messageUpdate
-			case "status_change":
+			case EventTypeStatusChange:
 				var statusChange EventStatusChange
 				err = json.Unmarshal([]byte(ev.Data), &statusChange)
 				if err != nil {

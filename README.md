@@ -64,8 +64,13 @@ func main() {
 			case agentapisdk.EventStatusChange:
 				fmt.Println("Status change:", e.Status)
 			}
-		case err := <-errCh:
-			log.Fatal(err)
+		case err, ok := <-errCh:
+			if !ok {
+				return
+			}
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 }

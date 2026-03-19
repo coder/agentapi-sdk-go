@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Defines values for AgentStatus.
@@ -77,7 +79,7 @@ type ErrorModel struct {
 
 // Message defines model for Message.
 type Message struct {
-	// Content Message content. The message is formatted as it appears in the agent's terminal session, meaning it consists of lines of text with 80 characters per line.
+	// Content Message content. The message is formatted as it appears in the agent's terminal session, meaning that, by default, it consists of lines of text with 80 characters per line.
 	Content string `json:"content"`
 
 	// Id Unique identifier for the message. This identifier also represents the order of the message in the conversation history.
@@ -115,7 +117,7 @@ type MessageUpdateBody struct {
 	// Id Unique identifier for the message. This identifier also represents the order of the message in the conversation history.
 	Id int64 `json:"id"`
 
-	// Message Message content. The message is formatted as it appears in the agent's terminal session, meaning it consists of lines of text with 80 characters per line.
+	// Message Message content. The message is formatted as it appears in the agent's terminal session, meaning that, by default, it consists of lines of text with 80 characters per line.
 	Message string           `json:"message"`
 	Role    ConversationRole `json:"role"`
 
@@ -134,18 +136,44 @@ type MessagesResponseBody struct {
 
 // StatusChangeBody defines model for StatusChangeBody.
 type StatusChangeBody struct {
-	Status AgentStatus `json:"status"`
+	// AgentType Type of the agent being used by the server.
+	AgentType string      `json:"agent_type"`
+	Status    AgentStatus `json:"status"`
 }
 
 // StatusResponseBody defines model for StatusResponseBody.
 type StatusResponseBody struct {
 	// Schema A URL to the JSON Schema for this object.
-	Schema *string     `json:"$schema,omitempty"`
-	Status AgentStatus `json:"status"`
+	Schema *string `json:"$schema,omitempty"`
+
+	// AgentType Type of the agent being used by the server.
+	AgentType string      `json:"agent_type"`
+	Status    AgentStatus `json:"status"`
+}
+
+// UploadResponseBody defines model for UploadResponseBody.
+type UploadResponseBody struct {
+	// Schema A URL to the JSON Schema for this object.
+	Schema *string `json:"$schema,omitempty"`
+
+	// FilePath Path of the file
+	FilePath string `json:"filePath"`
+
+	// Ok Indicates whether the files were uploaded successfully.
+	Ok bool `json:"ok"`
+}
+
+// PostUploadMultipartBody defines parameters for PostUpload.
+type PostUploadMultipartBody struct {
+	// File file that needs to be uploaded
+	File openapi_types.File `json:"file"`
 }
 
 // PostMessageJSONRequestBody defines body for PostMessage for application/json ContentType.
 type PostMessageJSONRequestBody = MessageRequestBody
+
+// PostUploadMultipartRequestBody defines body for PostUpload for multipart/form-data ContentType.
+type PostUploadMultipartRequestBody PostUploadMultipartBody
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -233,6 +261,9 @@ type ClientInterface interface {
 
 	// GetStatus request
 	GetStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostUploadWithBody request with any body
+	PostUploadWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) SubscribeEvents(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -285,6 +316,18 @@ func (c *Client) GetMessages(ctx context.Context, reqEditors ...RequestEditorFn)
 
 func (c *Client) GetStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetStatusRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostUploadWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostUploadRequestWithBody(c.Server, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -416,6 +459,35 @@ func NewGetStatusRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewPostUploadRequestWithBody generates requests for PostUpload with any type of body
+func NewPostUploadRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/upload")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -472,6 +544,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetStatusWithResponse request
 	GetStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStatusResponse, error)
+
+	// PostUploadWithBodyWithResponse request with any body
+	PostUploadWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostUploadResponse, error)
 }
 
 type SubscribeEventsResponse struct {
@@ -565,6 +640,29 @@ func (r GetStatusResponse) StatusCode() int {
 	return 0
 }
 
+type PostUploadResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON200                       *UploadResponseBody
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r PostUploadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostUploadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // SubscribeEventsWithResponse request returning *SubscribeEventsResponse
 func (c *ClientWithResponses) SubscribeEventsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SubscribeEventsResponse, error) {
 	rsp, err := c.SubscribeEvents(ctx, reqEditors...)
@@ -607,6 +705,15 @@ func (c *ClientWithResponses) GetStatusWithResponse(ctx context.Context, reqEdit
 		return nil, err
 	}
 	return ParseGetStatusResponse(rsp)
+}
+
+// PostUploadWithBodyWithResponse request with arbitrary body returning *PostUploadResponse
+func (c *ClientWithResponses) PostUploadWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostUploadResponse, error) {
+	rsp, err := c.PostUploadWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostUploadResponse(rsp)
 }
 
 // ParseSubscribeEventsResponse parses an HTTP response from a SubscribeEventsWithResponse call
@@ -717,6 +824,39 @@ func ParseGetStatusResponse(rsp *http.Response) (*GetStatusResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest StatusResponseBody
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostUploadResponse parses an HTTP response from a PostUploadWithResponse call
+func ParsePostUploadResponse(rsp *http.Response) (*PostUploadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostUploadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UploadResponseBody
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
